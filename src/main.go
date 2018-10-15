@@ -1,6 +1,13 @@
 package main
 
 import (
+	"github.com/joho/godotenv"
+	"fmt"
+	"github.com/herzo175/live-stream-user-service/src/bundles/users"
+	"net"
+	"crypto/tls"
+	"gopkg.in/mgo.v2"
+	"github.com/herzo175/live-stream-user-service/src/bundles"
 	"log"
 	"net/http"
 	"os"
@@ -9,33 +16,88 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/handlers"
+	// "github.com/mongodb/mongo-go-driver/mongo"
 
-	"github.com/herzo175/live-stream-user-service/src/controllers/admin"
+	"github.com/herzo175/live-stream-user-service/src/bundles/admin/healthcheck"
 )
 
 func makeServer() *http.Server {
 	router := mux.NewRouter()
+	// TODO: move to env config
+	tlsConfig := &tls.Config{}
 
-	healthcheckConfig := admin.HealthcheckConfig{
-		Router: router,
+	dialInfo := &mgo.DialInfo{
+		Addrs: []string{
+			os.Getenv("DB_SHARD_1"),
+			os.Getenv("DB_SHARD_2"),
+			os.Getenv("DB_SHARD_3"),
+		},
+		Database: os.Getenv("DB_NAME"),
+		Username: os.Getenv("DB_USERNAME"),
+		Password: os.Getenv("DB_PASSWORD"),
+	}
+	dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+		conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
+		return conn, err
 	}
 
-	healthcheckConfig.MakeController()
+	dbClient, err := mgo.DialWithInfo(dialInfo)
+
+	if err != nil {
+		log.Fatal("unable to connect to db: ", err)
+	}
+	
+	controllerConfig := bundles.Controller{}
+	controllerConfig.Router = router
+	controllerConfig.DBClient = dbClient
+	controllerConfig.DBName = "dev-live-stream-server-db"
+
+	healthcheckController := healthcheck.HealthcheckController{Controller: &controllerConfig}
+	healthcheckController.MakeRouter()
+
+	userController := users.UserController{Controller: &controllerConfig}
+	userController.MakeRouter()
+
+	allowedHeaders := handlers.AllowedHeaders(
+		[]string{
+			"Accept",
+			"Content-Type",
+			"Content-Length",
+			"Accept-Encoding",
+			"X-CSRF-Token",
+			"Authorization",
+		},
+	)
+
+	allowedOrigins := handlers.AllowedOrigins(
+		[]string{"*"},
+	)
+
+	allowedMethods := handlers.AllowedMethods(
+		[]string{"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"},
+	)
 
 	server := http.Server{
-		Addr: "0.0.0.0:3000",
-		Handler: router,
+		Addr: fmt.Sprintf("0.0.0.0:%s", os.Getenv("PORT")),
+		Handler: handlers.CORS(allowedHeaders, allowedOrigins, allowedMethods)(router),
 	}
 
 	return &server
 }
 
 func start() {
+	err := godotenv.Load()
+
+	if err != nil {
+		log.Fatal("Unable to load environment file")
+	}
+
 	var wait time.Duration
 	server := makeServer()
 	
 	go func() {
-		// TODO: get tls cert
+		// TODO: get tls cert, serve tls
 		err := server.ListenAndServe()
 
 		if err != nil {

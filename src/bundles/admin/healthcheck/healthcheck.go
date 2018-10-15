@@ -1,23 +1,23 @@
-package admin
+package healthcheck
 
 import (
 	"encoding/json"
 	"log"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/herzo175/live-stream-user-service/src/bundles"
 )
-
-type HealthcheckConfig struct {
-	Router *mux.Router
-}
 
 type HealthcheckResponse struct {
 	Status string `json:"status"`
 }
 
-func (config *HealthcheckConfig) MakeController() {
-	subrouter := config.Router.PathPrefix("/healthcheck").Subrouter()
+type HealthcheckController struct {
+	Controller *bundles.Controller
+}
+
+func (controller *HealthcheckController) MakeRouter() {
+	subrouter := controller.Controller.Router.PathPrefix("/healthcheck").Subrouter()
 	subrouter.HandleFunc("", getHealthStatus)
 }
 
