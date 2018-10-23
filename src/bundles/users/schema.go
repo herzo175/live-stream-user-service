@@ -11,11 +11,27 @@ import (
 // TODO: update billing info
 // TODO: reset password, email
 // TODO: permission groups
-
+// TODO: user create, user update structs
 type User struct {
 	Id       bson.ObjectId `json:"_id" bson:"_id,omitempty"`
 	Email    string        `json:"email" bson:"email,omitempty"`
 	Password string        `json:"password" bson:"password,omitempty"`
+	Roles []auth.Permission `json:"roles" bson:"roles,omitempty"`
+}
+
+type UserTokenBody struct {
+	Id    string            `json:"_id"`
+	Roles []auth.Permission `json:"roles"`
+}
+
+func (t UserTokenBody) HasPermission(service, role string) bool {
+	for _, r := range t.Roles {
+		if r.Service == service && r.Role == role {
+			return true
+		}
+	}
+
+	return false
 }
 
 type Schema struct {
@@ -26,6 +42,7 @@ func MakeSchema(dbName string, session *mgo.Session) *Schema {
 	schema := Schema{}
 	schema.collection = session.DB(dbName).C("Users")
 
+	// TODO: notify if duplicate key
 	index := mgo.Index{
 		Key:      []string{"email"},
 		Unique:   true,

@@ -1,8 +1,6 @@
 package users
 
 import (
-	"github.com/herzo175/live-stream-user-service/src/util/auth"
-	"github.com/gorilla/mux"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -19,7 +17,10 @@ func (controller *UserController) MakeRouter() {
 	subrouter := controller.Controller.Router.PathPrefix("/users").Subrouter()
 	subrouter.HandleFunc("", controller.Register).Methods("POST")
 	subrouter.HandleFunc("/login", controller.Login).Methods("POST")
-	subrouter.HandleFunc("/{id}", auth.IsAuthenticated(controller.GetById)).Methods("GET")
+
+	subrouter.HandleFunc(
+		"/me", bundles.GetAuthenticated(&UserTokenBody{}, controller.Me),
+	).Methods("GET")
 
 	controller.schema = MakeSchema(controller.Controller.DBName, controller.Controller.DBClient)
 }
@@ -44,16 +45,7 @@ func (controller *UserController) Register(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	data, err := json.Marshal(token)
-
-	if err != nil {
-		http.Error(w, "Unable to format token", 500)
-		log.Println(err)
-		return
-	}
-
-	w.Write(data)
+	bundles.Finish(token, w)
 }
 
 // Requires email and password in body
@@ -76,37 +68,14 @@ func (controller *UserController) Login(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	data, err := json.Marshal(token)
-
-	if err != nil {
-		http.Error(w, "Unable to format token", 500)
-		log.Println(err)
-		return
-	}
-
-	w.Write(data)
+	bundles.Finish(token, w)
 }
 
-func (controller *UserController) GetById(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-	user, err := controller.schema.GetById(id)
-
-	if err != nil {
-		http.Error(w, "Unable to find user", 404)
-		log.Println(err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	data, err := json.Marshal(user)
-
-	if err != nil {
-		http.Error(w, "Unable to format found user", 500)
-		log.Println(err)
-		log.Println(user)
-		return
-	}
-
-	w.Write(data)
+func (controller *UserController) Me(
+	urlParams map[string]string,
+	queryParams, headers map[string][]string,
+	tokenBodyPointer interface{},
+) (interface{}, error) {
+	id := tokenBodyPointer.(*UserTokenBody).Id
+	return controller.schema.GetById(id)
 }

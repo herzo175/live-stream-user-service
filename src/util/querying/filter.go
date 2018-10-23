@@ -1,6 +1,7 @@
 package querying
 
 import (
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -47,7 +48,7 @@ func generateQueryClause(operator string, values []string, fieldType string) map
 	return bson.M(querySegment)
 }
 
-func GenerateQueryFromMultivaluedMap(queryMap map[string][]string, collectionType interface{}) interface{} {
+func GenerateQueryFromMultivaluedMap(queryMap map[string][]string, collectionType interface{}) (map[string]interface{}, error) {
 	// bson.M{"status": "A", qty: { $lt: 30 } }
 	query := make(map[string]interface{})
 	allowedFields := make(map[string]string)
@@ -62,8 +63,13 @@ func GenerateQueryFromMultivaluedMap(queryMap map[string][]string, collectionTyp
 	// generate clause for each element in query map
 	for k, v := range queryMap {
 		clause := strings.SplitN(k, "__", 2)
+
+		if len(clause) < 2 {
+			return query, errors.New("Incorrecly formatted query param clause")
+		}
+
 		query[clause[0]] = generateQueryClause(clause[1], v, allowedFields[clause[0]])
 	}
 
-	return bson.M(query)
+	return query, nil
 }
