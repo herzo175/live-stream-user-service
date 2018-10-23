@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/herzo175/live-stream-user-service/src/bundles/servers"
 	"github.com/joho/godotenv"
 	"fmt"
 	"github.com/herzo175/live-stream-user-service/src/bundles/users"
@@ -24,7 +25,7 @@ import (
 
 func makeServer() *http.Server {
 	router := mux.NewRouter()
-	// TODO: move to env config
+	// TODO: use go static config library
 	tlsConfig := &tls.Config{}
 
 	dialInfo := &mgo.DialInfo{
@@ -58,6 +59,9 @@ func makeServer() *http.Server {
 
 	userController := users.UserController{Controller: &controllerConfig}
 	userController.MakeRouter()
+
+	serverController := servers.ServerController{Controller: &controllerConfig}
+	serverController.MakeRouter()
 
 	allowedHeaders := handlers.AllowedHeaders(
 		[]string{
