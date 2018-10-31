@@ -1,6 +1,8 @@
 package servers
 
 import (
+	"os"
+	"github.com/herzo175/live-stream-user-service/src/bundles/billing"
 	"errors"
 	"encoding/json"
 	"fmt"
@@ -99,6 +101,7 @@ type ServerInfoUpdate struct {
 	ServerMutationFields
 	ServerName string `json:"server_name" bson:"server_name,omitempty"`
 	StreamName string `json:"stream_name" bson:"stream_name,omitempty"`
+	DropletId  int64  `json:"droplet_id" bson:"droplet_id,omitempty"`
 }
 
 type ServerStatusUpdate struct {
@@ -119,12 +122,14 @@ type ServerIpAddressUpdate struct {
 type ServerDB struct {
 	collection *mgo.Collection
 	serverService *serverservice.Service
+	billingSchemaConfig *billing.BillingDB
 }
 
-func MakeSchema(dbName string, session *mgo.Session) *ServerDB {
+func MakeSchema(db *mgo.Database) *ServerDB {
 	schema := ServerDB{}
-	schema.collection = session.DB(dbName).C("Servers")
+	schema.collection = db.C("Servers")
 	schema.serverService = serverservice.MakeService()
+	schema.billingSchemaConfig = billing.MakeSchema(db)
 
 	return &schema
 }
@@ -156,6 +161,15 @@ func (schemaConfig *ServerDB) Create(userId string, server *ServerCreate) (err e
 		return err
 	}
 
+	// subscriptionId := 
+	err = schemaConfig.billingSchemaConfig.Start(
+		server.UserId, os.Getenv("STRIPE_SERVER_PLAN_ID"), server.Id)
+
+	if err != nil {
+		// TODO: delete db server
+		return err
+	}
+
 	// update with droplet id
 	serverInstance, err := schemaConfig.serverService.CreateServer(
 		fmt.Sprintf("live-stream-%s", server.Id.Hex()),
@@ -164,6 +178,7 @@ func (schemaConfig *ServerDB) Create(userId string, server *ServerCreate) (err e
 	)
 
 	if err != nil {
+		// TODO: delete db server, billing info
 		return err
 	}
 
@@ -172,6 +187,7 @@ func (schemaConfig *ServerDB) Create(userId string, server *ServerCreate) (err e
 	}
 
 	return schemaConfig.Update(server.Id.Hex(), &dropletUpdate)
+	// TODO: revert changes on failure
 }
 
 func (schemaConfig *ServerDB) GetById(id string, userId string) (server *Server, err error) {
@@ -201,7 +217,13 @@ func (m *ServerMutationFields) update(collection *mgo.Collection, query, change 
 	return collection.Update(query, change)
 }
 
-func (schemaConfig *ServerDB) Delete(id string) error {
+func (schemaConfig *ServerDB) Delete(id string) (err error) {
+	err = schemaConfig.billingSchemaConfig.Stop(id)
+
+	if err != nil {
+		return err
+	}
+
 	query := bson.M{"_id": bson.ObjectIdHex(id)}
 	return schemaConfig.collection.Remove(query)
 }
