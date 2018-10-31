@@ -62,6 +62,11 @@ func GenerateQueryFromMultivaluedMap(queryMap map[string][]string, collectionTyp
 
 	// generate clause for each element in query map
 	for k, v := range queryMap {
+		// TODO: check list for reserved names
+		if k == "start" || k == "end" {
+			continue
+		}
+
 		clause := strings.SplitN(k, "__", 2)
 
 		if len(clause) < 2 {

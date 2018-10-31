@@ -57,7 +57,7 @@ func (controller *ServerController) MakeRouter() {
 		"/{id}", auth.IsAuthenticated(&users.UserTokenBody{}, controller.Delete),
 	).Methods("DELETE")
 
-	controller.schema = MakeSchema(controller.Controller.DBName, controller.Controller.DBClient)
+	controller.schema = MakeSchema(controller.Controller.DB)
 	controller.notificationClient = channels.MakeClient()
 }
 
@@ -120,9 +120,21 @@ func (controller *ServerController) Update(
 
 	updatePointer := update.(*ServerInfoUpdate)
 
-	err = controller.schema.serverService.RestartServer(
-		server.Id.Hex(), updatePointer.StreamName, server.DropletId,
+	err = controller.schema.serverService.DeleteServer(server.DropletId)
+
+	if err != nil {
+		return err
+	}
+
+	newServer, err := controller.schema.serverService.CreateServer(
+		server.ServerName, server.StreamName, server.Id.Hex(),
 	)
+
+	if err != nil {
+		return err
+	}
+
+	updatePointer.DropletId = newServer.DropletId
 
 	return controller.schema.Update(id, updatePointer)
 }
@@ -205,6 +217,7 @@ func (controller *ServerController) Delete(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get server with id %s", id), 404)
 		log.Println(err)
+		return
 	}
 
 	err = controller.schema.serverService.DeleteServer(server.DropletId)
@@ -212,6 +225,7 @@ func (controller *ServerController) Delete(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		log.Println(err)
+		return
 	}
 
 	err = controller.schema.Delete(id)
@@ -219,5 +233,6 @@ func (controller *ServerController) Delete(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		http.Error(w, "Failed to delete server from database", 500)
 		log.Println(err)
+		return
 	}
 }

@@ -1,19 +1,19 @@
 package bundles
 
 import (
-	"github.com/herzo175/live-stream-user-service/src/util/auth"
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/herzo175/live-stream-user-service/src/util/auth"
 
 	"github.com/gorilla/mux"
 	mgo "gopkg.in/mgo.v2"
 )
 
 type Controller struct {
-	Router   *mux.Router
-	DBClient *mgo.Session
-	DBName   string
+	Router *mux.Router
+	DB     *mgo.Database
 }
 
 // NOTE: find better ways to dry up outerwear

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/herzo175/live-stream-user-service/src/bundles/billing"
 	"github.com/herzo175/live-stream-user-service/src/bundles/servers"
 	"github.com/joho/godotenv"
 	"fmt"
@@ -51,8 +52,7 @@ func makeServer() *http.Server {
 	
 	controllerConfig := bundles.Controller{}
 	controllerConfig.Router = router
-	controllerConfig.DBClient = dbClient
-	controllerConfig.DBName = "dev-live-stream-server-db"
+	controllerConfig.DB = dbClient.DB(os.Getenv("DB_CLIENT_NAME"))
 
 	healthcheckController := healthcheck.HealthcheckController{Controller: &controllerConfig}
 	healthcheckController.MakeRouter()
@@ -62,6 +62,9 @@ func makeServer() *http.Server {
 
 	serverController := servers.ServerController{Controller: &controllerConfig}
 	serverController.MakeRouter()
+
+	billingController := billing.BillingController{Controller: &controllerConfig}
+	billingController.MakeRouter()
 
 	allowedHeaders := handlers.AllowedHeaders(
 		[]string{
