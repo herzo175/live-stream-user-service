@@ -1,6 +1,8 @@
 package emails
 
 import (
+	"errors"
+	"log"
 	"os"
 
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -33,6 +35,12 @@ func (client *EmailClient) Send(email Email) (err error) {
 	from := mail.NewEmail(email.From, email.FromAddress)
 	message := mail.NewSingleEmail(from, email.Subject, to, email.PlainText, email.HtmlText)
 
-	_, err = client.sendgridClient.Send(message)
+	resp, err := client.sendgridClient.Send(message)
+
+	if resp.StatusCode != 202 {
+		log.Println("Error sending email: ", resp.Body)
+		return errors.New(resp.Body)
+	}
+
 	return err
 }

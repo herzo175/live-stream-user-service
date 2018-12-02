@@ -1,11 +1,8 @@
-package querying
+package database
 
 import (
 	"errors"
 	"strconv"
-
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
 
 type PaginatedList struct {
@@ -43,31 +40,14 @@ func ExtractStartEnd(queryParams map[string][]string) (start, end int64, err err
 	return start, end, nil
 }
 
-func GetPaginatedList(
-	collection *mgo.Collection,
-	schemaTypeSlice interface{},
-	start, end int,
-	clauses map[string]interface{},
-) (results *PaginatedList, err error) {
-	query := collection.Find(bson.M(clauses))
-	total, err := query.Count()
-
-	if err != nil {
-		return results, err
-	}
-
-	err = query.Skip(start).Limit(end).All(schemaTypeSlice)
-
-	if err != nil {
-		return results, err
-	}
-
-	results = &PaginatedList{
-		Results: schemaTypeSlice,
+func ToPaginatedList(
+	filledSchemas interface{},
+	start, end, total int,
+) *PaginatedList {
+	return &PaginatedList{
+		Results: filledSchemas,
 		Start:   start,
 		End:     end,
 		Total:   total,
 	}
-
-	return results, nil
 }

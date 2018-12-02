@@ -5,19 +5,15 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/herzo175/live-stream-user-service/src/bundles"
+	"github.com/gorilla/mux"
 )
 
 type HealthcheckResponse struct {
 	Status string `json:"status"`
 }
 
-type HealthcheckController struct {
-	Controller *bundles.Controller
-}
-
-func (controller *HealthcheckController) MakeRouter() {
-	subrouter := controller.Controller.Router.PathPrefix("/healthcheck").Subrouter()
+func MakeRouter(masterRouter *mux.Router) {
+	subrouter := masterRouter.PathPrefix("/healthcheck").Subrouter()
 	subrouter.HandleFunc("", getHealthStatus)
 }
 

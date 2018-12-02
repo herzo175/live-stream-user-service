@@ -106,6 +106,8 @@ func (service *Service) RestartServer(serverId, streamName string, dropletId int
 		return err
 	}
 
+	defer resp.Body.Close()
+
 	if resp.StatusCode != 200 {
 		return errors.New("Failed to start restart server")
 	}

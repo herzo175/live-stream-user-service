@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -39,7 +38,7 @@ func (claims EncodedClaims) Valid() error {
 }
 
 // tokenBodySchema should be a struct to deserialize to
-func IsAuthenticated(tokenBodySchema interface{}, next AuthHandlerFunc) http.HandlerFunc {
+func IsAuthenticated(tokenBodySchema interface{}, signingString string, next AuthHandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bearerStrings := strings.Split(r.Header.Get("Authorization"), "Bearer ")
 
@@ -49,7 +48,7 @@ func IsAuthenticated(tokenBodySchema interface{}, next AuthHandlerFunc) http.Han
 		}
 
 		token := bearerStrings[1]
-		err := ValidateToken(token, tokenBodySchema)
+		err := ValidateToken(token, tokenBodySchema, signingString)
 
 		if err != nil {
 			http.Error(w, "Must provide valid bearer token", 403)
@@ -61,7 +60,7 @@ func IsAuthenticated(tokenBodySchema interface{}, next AuthHandlerFunc) http.Han
 }
 
 // data should encode as json
-func GenerateToken(data interface{}) (tokenResponse TokenResponse, err error) {
+func GenerateToken(data interface{}, signingString string, expirationMins int) (tokenResponse TokenResponse, err error) {
 	bytes, err := json.Marshal(data)
 
 	if err != nil {
@@ -75,13 +74,12 @@ func GenerateToken(data interface{}) (tokenResponse TokenResponse, err error) {
 		return tokenResponse, err
 	}
 
-	// TODO: make time configurable
-	claims["exp"] = time.Now().Add(time.Hour * 8)
+	claims["exp"] = time.Now().Add(time.Minute * time.Duration(expirationMins))
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 
 	// NOTE: use signing string file?
 	tokenResponse = TokenResponse{}
-	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SIGNING_STRING")))
+	tokenString, err := token.SignedString([]byte(signingString))
 
 	if err != nil {
 		return tokenResponse, err
@@ -92,10 +90,10 @@ func GenerateToken(data interface{}) (tokenResponse TokenResponse, err error) {
 }
 
 // data should be a pointer to a json struct
-func ValidateToken(tokenString string, data interface{}) error {
+func ValidateToken(tokenString string, data interface{}, signingString string) error {
 	claims := make(EncodedClaims)
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_SIGNING_STRING")), nil
+		return []byte(signingString), nil
 	})
 
 	if err != nil {
