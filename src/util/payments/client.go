@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"github.com/stripe/stripe-go/source"
 	"github.com/stripe/stripe-go/plan"
 	"github.com/stripe/stripe-go/usagerecord"
 	"time"
@@ -79,6 +80,14 @@ func GetCustomer(stripeCustomerId string) (*stripe.Customer, error) {
 	return customer.Get(stripeCustomerId, nil)
 }
 
+func DeleteCustomer(stripeCustomerId string) error {
+	stripe.Key = os.Getenv("STRIPE_API_KEY")
+
+	params := &stripe.CustomerParams{}
+	_, err := customer.Del(stripeCustomerId, params)
+	return err
+}
+
 func GetPlan(planId string) (*stripe.Plan, error) {
 	stripe.Key = os.Getenv("STRIPE_API_KEY")
 
@@ -97,4 +106,24 @@ func AddToInvoice(subscriptionItemId string, units int64) (*stripe.UsageRecord, 
 	return usagerecord.New(params)
 }
 
-// TODO: remove source for customer
+func DetatchSource(customerId, sourceId string) (err error) {
+	stripe.Key = os.Getenv("STRIPE_API_KEY")
+
+	params := &stripe.SourceObjectDetachParams{
+		Customer: stripe.String(customerId),
+	}
+
+	_, err = source.Detach(sourceId, params)
+	return err
+}
+
+func SetDefaultSource(customerId, sourceId string) (err error) {
+	stripe.Key = os.Getenv("STRIPE_API_KEY")
+
+	params := &stripe.CustomerParams{
+		DefaultSource: stripe.String(sourceId),
+	}
+
+	_, err = customer.Update(customerId, params)
+	return err
+}

@@ -1,15 +1,16 @@
 package main
 
 import (
+	"github.com/herzo175/live-stream-user-service/src/util/serverservice"
+	"github.com/herzo175/live-stream-user-service/src/util/channels"
+	"github.com/herzo175/live-stream-user-service/src/util/emails"
+	"github.com/herzo175/live-stream-user-service/src/util/cache"
+	"github.com/herzo175/live-stream-user-service/src/util/database"
 	"github.com/herzo175/live-stream-user-service/src/bundles/billing"
 	"github.com/herzo175/live-stream-user-service/src/bundles/servers"
 	"github.com/joho/godotenv"
 	"fmt"
 	"github.com/herzo175/live-stream-user-service/src/bundles/users"
-	"net"
-	"crypto/tls"
-	"gopkg.in/mgo.v2"
-	"github.com/herzo175/live-stream-user-service/src/bundles"
 	"log"
 	"net/http"
 	"os"
@@ -24,47 +25,38 @@ import (
 	"github.com/herzo175/live-stream-user-service/src/bundles/admin/healthcheck"
 )
 
+func setupExternalClients() (
+	*mux.Router,
+	*database.SQLDatabaseClient,
+	*emails.EmailClient,
+	*channels.Client,
+	*cache.RedisCacheClient,
+	*serverservice.Service,
+) {
+	return mux.NewRouter(),
+		database.MakeClient(),
+		emails.MakeClient(),
+		channels.MakeClient(),
+		cache.MakeRedisCache(
+			os.Getenv("TOKEN_CACHE_ADDRESS"),
+			os.Getenv("TOKEN_CACHE_PASSWORD"),
+		),
+		serverservice.MakeService()
+}
+
 func makeServer() *http.Server {
-	router := mux.NewRouter()
-	// TODO: use go static config library
-	tlsConfig := &tls.Config{}
+	router, db, emailClient, notificationClient, tokenCache, serverService := setupExternalClients()
 
-	dialInfo := &mgo.DialInfo{
-		Addrs: []string{
-			os.Getenv("DB_SHARD_1"),
-			os.Getenv("DB_SHARD_2"),
-			os.Getenv("DB_SHARD_3"),
-		},
-		Database: os.Getenv("DB_NAME"),
-		Username: os.Getenv("DB_USERNAME"),
-		Password: os.Getenv("DB_PASSWORD"),
-	}
-	dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-		conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
-		return conn, err
-	}
+	healthcheck.MakeRouter(router)
 
-	dbClient, err := mgo.DialWithInfo(dialInfo)
+	userLogic := users.MakeUserLogic(db, emailClient, notificationClient, tokenCache)
+	users.MakeRouter(router, userLogic)
 
-	if err != nil {
-		log.Fatal("unable to connect to db: ", err)
-	}
-	
-	controllerConfig := bundles.Controller{}
-	controllerConfig.Router = router
-	controllerConfig.DB = dbClient.DB(os.Getenv("DB_CLIENT_NAME"))
+	billingLogic := billing.MakeBillingLogicConfig(db, userLogic)
+	billing.MakeRouter(router, billingLogic)
 
-	healthcheckController := healthcheck.HealthcheckController{Controller: &controllerConfig}
-	healthcheckController.MakeRouter()
-
-	userController := users.UserController{Controller: &controllerConfig}
-	userController.MakeRouter()
-
-	serverController := servers.ServerController{Controller: &controllerConfig}
-	serverController.MakeRouter()
-
-	billingController := billing.BillingController{Controller: &controllerConfig}
-	billingController.MakeRouter()
+	serverLogic := servers.MakeServerLogic(db, serverService, billingLogic, notificationClient)
+	servers.MakeRouter(router, serverLogic)
 
 	allowedHeaders := handlers.AllowedHeaders(
 		[]string{

@@ -6,6 +6,12 @@ import (
 	"github.com/pusher/pusher-http-go"
 )
 
+const (
+	EMAIL_VERIFIED_EVENT = "email_verified"
+	UPDATE_STATUS_EVENT  = "update__status"
+	UPDATE_IP_EVENT      = "update__ip_address"
+)
+
 type Client struct {
 	pusherClient *pusher.Client
 }
@@ -13,7 +19,6 @@ type Client struct {
 func MakeClient() *Client {
 	client := Client{}
 
-	// TODO: move to env config
 	pusherClient := pusher.Client{
 		AppId:   os.Getenv("PUSHER_APP_ID"),
 		Key:     os.Getenv("PUSHER_APP_KEY"),

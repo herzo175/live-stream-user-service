@@ -1,96 +1,105 @@
 package servers
 
 import (
-	"gopkg.in/mgo.v2/bson"
-	"github.com/herzo175/live-stream-user-service/src/util/channels"
-	"log"
-	"fmt"
+	"errors"
+	"github.com/herzo175/live-stream-user-service/src/util/database"
+	"github.com/herzo175/live-stream-user-service/src/util/requests"
+	"os"
 	"net/http"
 	"github.com/gorilla/mux"
 	"github.com/herzo175/live-stream-user-service/src/util/auth"
 	"github.com/herzo175/live-stream-user-service/src/bundles/users"
-	"github.com/herzo175/live-stream-user-service/src/util/querying"
-
-	"github.com/herzo175/live-stream-user-service/src/bundles"
 )
 
 type ServerController struct {
-	Controller         *bundles.Controller
-	schema             *ServerDB
-	notificationClient *channels.Client
+	logic ServerLogic
 }
 
-func (controller *ServerController) MakeRouter() {
-	subrouter := controller.Controller.Router.PathPrefix("/servers").Subrouter()
+func MakeRouter(router *mux.Router, logic ServerLogic) {
+	controller := ServerController{}
+	subrouter := router.PathPrefix("/servers").Subrouter()
+
+	controller.logic = logic
 
 	subrouter.HandleFunc(
-		"", bundles.GetAuthenticated(&users.UserTokenBody{}, controller.Get),
+		"", requests.GetAuthenticated(&users.UserTokenBody{}, controller.Get),
 	).Methods("GET")
 
 	subrouter.HandleFunc(
-		"", bundles.SetAuthenticated(&ServerCreate{}, &users.UserTokenBody{}, controller.Create),
+		"", requests.SetAuthenticated(&CreateServerRequest{}, &users.UserTokenBody{}, controller.Create),
 	).Methods("POST")
 
 	subrouter.HandleFunc(
-		"/{id}", bundles.GetAuthenticated(&users.UserTokenBody{}, controller.GetById),
+		"/{id}", requests.GetAuthenticated(&users.UserTokenBody{}, controller.GetById),
 	).Methods("GET")
 
 	subrouter.HandleFunc(
-		"/{id}", bundles.SetAuthenticated(&ServerInfoUpdate{}, &users.UserTokenBody{}, controller.Update),
+		"/{id}", requests.SetAuthenticated(&ServerInfoUpdateRequest{}, &users.UserTokenBody{}, controller.Update),
 	).Methods("PUT")
 
 	// TODO: set authorized
 	subrouter.HandleFunc(
-		"/{id}/status", bundles.SetAuthenticated(&ServerStatusUpdate{}, &users.UserTokenBody{}, controller.SetStatus),
+		"/{id}/status", requests.SetAuthenticated(&ServerStatusUpdate{}, &users.UserTokenBody{}, controller.SetStatus),
 	).Methods("PUT")
 
 	// TODO: set authorized
 	subrouter.HandleFunc(
-		"/{id}/ip_address", bundles.SetAuthenticated(&ServerIpAddressUpdate{}, &users.UserTokenBody{}, controller.SetIpAddress),
+		"/{id}/ip_address", requests.SetAuthenticated(&ServerIpAddressUpdate{}, &users.UserTokenBody{}, controller.SetIpAddress),
 	).Methods("PUT")
 
 	subrouter.HandleFunc(
-		"/{id}/restart", auth.IsAuthenticated(&users.UserTokenBody{}, controller.Restart),
+		"/{id}/restart", auth.IsAuthenticated(&users.UserTokenBody{}, os.Getenv("JWT_SIGNING_STRING"), controller.Restart),
 	).Methods("POST")
 
 	subrouter.HandleFunc(
-		"/{id}", auth.IsAuthenticated(&users.UserTokenBody{}, controller.Delete),
+		"/{id}", auth.IsAuthenticated(&users.UserTokenBody{}, os.Getenv("JWT_SIGNING_STRING"), controller.Delete),
 	).Methods("DELETE")
-
-	controller.schema = MakeSchema(controller.Controller.DB)
-	controller.notificationClient = channels.MakeClient()
+	
+	controller.logic = logic
 }
 
 func (controller *ServerController) Get(
 	urlParams map[string]string,
 	queryParams, headers map[string][]string,
 	tokenBodyPointer interface{},
-) (interface{}, error) {
-	start, end, err := querying.ExtractStartEnd(queryParams)
+) (interface{}, *requests.ControllerError) {
+	start, end, err := database.ExtractStartEnd(queryParams)
 
 	if err != nil {
-		return nil, err
+		return nil, &requests.ControllerError{
+			StatusCode: 400,
+			Error: errors.New("Failed to extract start and end of request"),
+		}
 	}
 
 	userId := tokenBodyPointer.(*users.UserTokenBody).Id
-	filter, err := querying.GenerateQueryFromMultivaluedMap(queryParams, Server{})
+	filter, err := database.TranslateQueryMap(queryParams, Server{})
 
 	if err != nil {
-		return nil, err
+		return nil, &requests.ControllerError{
+			StatusCode: 400,
+			Error: errors.New("Failed to translate query params to filter expressions"),
+		}
 	}
 
-	paginatedList, err := controller.schema.Get(userId, filter, int(start), int(end))
-	return &paginatedList, err
+	return controller.logic.Get(userId, filter, int(start), int(end))
+}
+
+type CreateServerRequest struct {
+	ServerName string `json:"server_name"`
+	StreamName string `json:"stream_name"`
 }
 
 func (controller *ServerController) Create(
 	urlParams map[string]string,
 	headers map[string][]string,
-	server interface{},
+	body interface{},
 	tokenBodyPointer interface{},
-) error {
+) *requests.ControllerError {
 	userId := tokenBodyPointer.(*users.UserTokenBody).Id
-	return controller.schema.Create(userId, server.(*ServerCreate))
+	createServerRequest := body.(*CreateServerRequest)
+
+	return controller.logic.Create(userId, createServerRequest.ServerName, createServerRequest.StreamName)
 }
 
 func (controller *ServerController) GetById(
@@ -98,141 +107,86 @@ func (controller *ServerController) GetById(
 	queryParams,
 	headers map[string][]string,
 	tokenBodyPointer interface{},
-) (interface{}, error) {
+) (interface{}, *requests.ControllerError) {
 	id := urlParams["id"]
 	userId := tokenBodyPointer.(*users.UserTokenBody).Id
-	return controller.schema.GetById(id, userId)
+	return controller.logic.GetById(id, userId)
+}
+
+type ServerInfoUpdateRequest struct {
+	ServerName string `json:"server_name,omitempty"`
+	StreamName string `json:"stream_name,omitempty"`
 }
 
 func (controller *ServerController) Update(
 	urlParams map[string]string,
 	headers map[string][]string,
-	update interface{},
+	body interface{},
 	tokenBodyPointer interface{},
-) error {
+) *requests.ControllerError {
 	id := urlParams["id"]
 	userId := tokenBodyPointer.(*users.UserTokenBody).Id
-	server, err := controller.schema.GetById(id, userId)
+	newInfo := body.(*ServerInfoUpdateRequest)
 
-	if err != nil {
-		return err
-	}
+	return controller.logic.UpdateServerInfo(id, userId, newInfo.ServerName, newInfo.StreamName)
+}
 
-	updatePointer := update.(*ServerInfoUpdate)
-
-	err = controller.schema.serverService.DeleteServer(server.DropletId)
-
-	if err != nil {
-		return err
-	}
-
-	newServer, err := controller.schema.serverService.CreateServer(
-		server.ServerName, server.StreamName, server.Id.Hex(),
-	)
-
-	if err != nil {
-		return err
-	}
-
-	updatePointer.DropletId = newServer.DropletId
-
-	return controller.schema.Update(id, updatePointer)
+type ServerStatusUpdate struct {
+	Status Status `json:"status" bson:"status,omitempty"`
 }
 
 func (controller *ServerController) SetStatus(
 	urlParams map[string]string,
 	headers map[string][]string,
-	update interface{},
+	body interface{},
 	tokenBodyPointer interface{},
-) error {
+) *requests.ControllerError {
 	id := urlParams["id"]
-	server, err := controller.schema.getById(bson.M{"_id": bson.ObjectIdHex(id)})
-	updatePointer := update.(*ServerStatusUpdate)
+	statusUpdate := body.(*ServerStatusUpdate)
 
-	if err != nil {
-		return err
-	}
+	return controller.logic.SetStatus(id, statusUpdate.Status)
+}
 
-	err = controller.notificationClient.Send(
-		server.ChannelName, "update__status", updatePointer.Status,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	return controller.schema.Update(id, updatePointer)
+type ServerIpAddressUpdate struct {
+	IpAddress string `json:"ip_address"`
 }
 
 func (controller *ServerController) SetIpAddress(
 	urlParams map[string]string,
 	headers map[string][]string,
-	update interface{},
+	body interface{},
 	tokenBodyPointer interface{},
-) error {
+) *requests.ControllerError {
 	id := urlParams["id"]
-	server, err := controller.schema.getById(bson.M{"_id": bson.ObjectIdHex(id)})
-	updatePointer := update.(*ServerIpAddressUpdate)
+	serverIpAddressUpdate := body.(*ServerIpAddressUpdate)
 
-	if err != nil {
-		return err
-	}
-
-	err = controller.notificationClient.Send(
-		server.ChannelName, "update__ip_address", updatePointer.IpAddress,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	return controller.schema.Update(id, updatePointer)
+	return controller.logic.SetIpAddress(id, serverIpAddressUpdate.IpAddress)
 }
 
 func (controller *ServerController) Restart(w http.ResponseWriter, r *http.Request, tokenBodyPointer interface{}) {
 	id := mux.Vars(r)["id"]
 	userId := tokenBodyPointer.(*users.UserTokenBody).Id
-	server, err := controller.schema.GetById(id, userId)
+	
+	controllerErr := controller.logic.RestartServer(id, userId)
 
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get server with id %s", id), 404)
-		log.Println(err)
+	if controllerErr != nil {
+		http.Error(w, controllerErr.Error.Error(), controllerErr.StatusCode)
+		return
 	}
 
-	err = controller.schema.serverService.RestartServer(
-		server.Id.Hex(), server.StreamName, server.DropletId,
-	)
-
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		log.Println(err)
-	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (controller *ServerController) Delete(w http.ResponseWriter, r *http.Request, tokenBodyPointer interface{}) {
 	id := mux.Vars(r)["id"]
-	userId := tokenBodyPointer.(*users.UserTokenBody).Id
-	server, err := controller.schema.GetById(id, userId)
+	userId := tokenBodyPointer.(*users.UserTokenBody).Id	
 
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get server with id %s", id), 404)
-		log.Println(err)
+	controllerError := controller.logic.Delete(id, userId)
+
+	if controllerError != nil {
+		http.Error(w, controllerError.Error.Error(), controllerError.StatusCode)
 		return
 	}
 
-	err = controller.schema.serverService.DeleteServer(server.DropletId)
-
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		log.Println(err)
-		return
-	}
-
-	err = controller.schema.Delete(id)
-
-	if err != nil {
-		http.Error(w, "Failed to delete server from database", 500)
-		log.Println(err)
-		return
-	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -1,19 +1,19 @@
-package bundles
+package requests
 
 import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/herzo175/live-stream-user-service/src/util/auth"
 
 	"github.com/gorilla/mux"
-	mgo "gopkg.in/mgo.v2"
 )
 
-type Controller struct {
-	Router *mux.Router
-	DB     *mgo.Database
+type ControllerError struct {
+	StatusCode int
+	Error      error
 }
 
 // NOTE: find better ways to dry up outerwear
@@ -34,14 +34,14 @@ type SetterFunc func(
 	urlParams map[string]string,
 	headers map[string][]string,
 	schemaPointer interface{},
-) error
+) *ControllerError
 
 type AuthenticatedSetterFunc func(
 	urlParams map[string]string,
 	headers map[string][]string,
 	schemaPointer interface{},
 	tokenBodyPointer interface{},
-) error
+) *ControllerError
 
 func Set(setter SetterFunc, schemaType interface{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -54,11 +54,11 @@ func Set(setter SetterFunc, schemaType interface{}) http.HandlerFunc {
 			return
 		}
 
-		err = setter(mux.Vars(r), r.Header, schemaType)
+		controllerError := setter(mux.Vars(r), r.Header, schemaType)
 
-		if err != nil {
-			http.Error(w, "An error occured while saving: "+err.Error(), 500)
-			log.Println(err)
+		if controllerError != nil {
+			http.Error(w, controllerError.Error.Error(), controllerError.StatusCode)
+			log.Println(controllerError.Error)
 			return
 		}
 
@@ -69,6 +69,7 @@ func Set(setter SetterFunc, schemaType interface{}) http.HandlerFunc {
 func SetAuthenticated(schemaType interface{}, tokenBody auth.TokenBody, setter AuthenticatedSetterFunc) http.HandlerFunc {
 	return auth.IsAuthenticated(
 		tokenBody,
+		os.Getenv("JWT_SIGNING_STRING"),
 		func(w http.ResponseWriter, r *http.Request, tokenBodyPointer interface{}) {
 			decoder := json.NewDecoder(r.Body)
 			err := decoder.Decode(schemaType)
@@ -79,11 +80,11 @@ func SetAuthenticated(schemaType interface{}, tokenBody auth.TokenBody, setter A
 				return
 			}
 
-			err = setter(mux.Vars(r), r.Header, schemaType, tokenBodyPointer)
+			controllerError := setter(mux.Vars(r), r.Header, schemaType, tokenBodyPointer)
 
 			if err != nil {
-				http.Error(w, "An error occured while saving: "+err.Error(), 500)
-				log.Println(err)
+				http.Error(w, controllerError.Error.Error(), controllerError.StatusCode)
+				log.Println(controllerError.Error)
 				return
 			}
 
@@ -95,14 +96,14 @@ func SetAuthenticated(schemaType interface{}, tokenBody auth.TokenBody, setter A
 type GetterFunc func(
 	urlParams map[string]string,
 	queryParams, headers map[string][]string,
-) (data interface{}, err error)
+) (data interface{}, err *ControllerError)
 
 type AuthenticatedGetterFunc func(
 	urlParams map[string]string,
 	queryParams,
 	headers map[string][]string,
 	tokenBodyPointer interface{},
-) (data interface{}, err error)
+) (data interface{}, err *ControllerError)
 
 func Get(getter GetterFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -110,8 +111,8 @@ func Get(getter GetterFunc) http.HandlerFunc {
 		data, err := getter(mux.Vars(r), r.URL.Query(), r.Header)
 
 		if err != nil {
-			http.Error(w, "Unable to retrieve data: "+err.Error(), 400)
-			log.Println(err)
+			http.Error(w, err.Error.Error(), err.StatusCode)
+			log.Println(err.Error)
 			return
 		}
 
@@ -122,12 +123,13 @@ func Get(getter GetterFunc) http.HandlerFunc {
 func GetAuthenticated(tokenBody auth.TokenBody, getter AuthenticatedGetterFunc) http.HandlerFunc {
 	return auth.IsAuthenticated(
 		tokenBody,
+		os.Getenv("JWT_SIGNING_STRING"),
 		func(w http.ResponseWriter, r *http.Request, tokenBodyPointer interface{}) {
 			data, err := getter(mux.Vars(r), r.URL.Query(), r.Header, tokenBodyPointer)
 
 			if err != nil {
-				http.Error(w, "Unable to retrieve data: "+err.Error(), 400)
-				log.Println(err)
+				http.Error(w, err.Error.Error(), err.StatusCode)
+				log.Println(err.Error)
 				return
 			}
 
