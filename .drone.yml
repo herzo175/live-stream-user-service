@@ -4,7 +4,6 @@ name: live-stream-user-service
 steps:
   - name: build
     image: plugins/docker
-    environment:
     settings:
       username:
         from_secret: docker_user
@@ -13,4 +12,4 @@ steps:
       repo: jeremyaherzog/live-stream-user-service
       tags:
         - latest
-        - $DRONE_REPO/$DRONE_COMMIT
+        - ${DRONE_COMMIT_SHA}
