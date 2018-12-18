@@ -8,7 +8,7 @@ import (
 	"github.com/herzo175/live-stream-user-service/src/util/database"
 	"github.com/herzo175/live-stream-user-service/src/bundles/billing"
 	"github.com/herzo175/live-stream-user-service/src/bundles/servers"
-	"github.com/joho/godotenv"
+	// "github.com/joho/godotenv"
 	"fmt"
 	"github.com/herzo175/live-stream-user-service/src/bundles/users"
 	"log"
@@ -86,11 +86,11 @@ func makeServer() *http.Server {
 }
 
 func start() {
-	err := godotenv.Load()
+	// err := godotenv.Load()
 
-	if err != nil {
-		log.Fatal("Unable to load environment file")
-	}
+	// if err != nil {
+	// 	log.Fatal("Unable to load environment file")
+	// }
 
 	var wait time.Duration
 	server := makeServer()
