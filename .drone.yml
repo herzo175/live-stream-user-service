@@ -5,13 +5,11 @@ steps:
   - name: build
     image: plugins/docker
     environment:
-      DOCKER_USER:
-        from_secret: docker_user
-      DOCKER_PASS:
-        from_secret: docker_pass
     settings:
-      username: $DOCKER_USER
-      password: $DOCKER_PASS
+      username:
+        from_secret: docker_user
+      password:
+        from_secret: docker_pass
       repo: herzo175/live-stream-user-service
       tags:
         - latest
