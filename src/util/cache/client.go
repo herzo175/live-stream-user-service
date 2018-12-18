@@ -23,13 +23,6 @@ type RedisCacheClient struct {
 func MakeRedisCache(address, password string) *RedisCacheClient {
 	cacheClient := RedisCacheClient{}
 
-	// TODO: move config to env
-	// TODO: move redis logic to util
-	// cacheClient.client = redis.NewClient(&redis.Options{
-	// 	Addr:     "redis-15994.c17.us-east-1-4.ec2.cloud.redislabs.com:15994",
-	// 	Password: "RwbWvVTCfAlzYv4xM4SwM1IIImtKfo0e", // no password set
-	// 	DB:       0,                                  // use default DB
-	// })
 	cacheClient.client = redis.NewClient(&redis.Options{
 		Addr:     address,
 		Password: password,

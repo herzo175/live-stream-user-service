@@ -1,0 +1,18 @@
+kind: pipeline
+name: live-stream-user-service
+
+steps:
+  - name: build
+    image: plugins/docker
+    environment:
+      DOCKER_USER:
+        from_secret: docker_user
+      DOCKER_PASS:
+        from_secret: docker_pass
+    settings:
+      username: $DOCKER_USER
+      password: $DOCKER_PASS
+      repo: herzo175/live-stream-user-service
+      tags:
+        - latest
+        - $DRONE_REPO/$DRONE_COMMIT
