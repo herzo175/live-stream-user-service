@@ -13,9 +13,6 @@ steps:
       tags:
         - latest
         - ${DRONE_COMMIT_SHA}
-      when:
-        branch: [ master ]
-        event: [ push ]
   - name: replace-text
     image: jeremyaherzog/drone-text-replacement
     settings:
@@ -24,3 +21,9 @@ steps:
   - name: deploy
     image: vallard/drone-kube
     template: deployment.yaml
+
+trigger:
+  branch:
+  - master
+  event:
+  - push
