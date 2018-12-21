@@ -1,15 +1,14 @@
 NAME=live-stream-user-service
 VERSION=$(shell git rev-parse HEAD)
-DEFAULT_PORT=3001
+HOST_PORT=3001
 
 build:
-	docker build --build-arg PORT_ARG=$(DEFAULT_PORT) -t $(NAME)/$(VERSION) ./
+	docker build -t $(NAME)/$(VERSION) ./
 
 run:
 	docker run --rm -it \
 		--env-file .env \
-		--network host \
-		-p $(DEFAULT_PORT):$(DEFAULT_PORT) \
+		-p $(HOST_PORT):80 \
 		$(NAME)/$(VERSION)
 
 deploy:

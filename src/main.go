@@ -8,8 +8,6 @@ import (
 	"github.com/herzo175/live-stream-user-service/src/util/database"
 	"github.com/herzo175/live-stream-user-service/src/bundles/billing"
 	"github.com/herzo175/live-stream-user-service/src/bundles/servers"
-	// "github.com/joho/godotenv"
-	"fmt"
 	"github.com/herzo175/live-stream-user-service/src/bundles/users"
 	"log"
 	"net/http"
@@ -78,7 +76,7 @@ func makeServer() *http.Server {
 	)
 
 	server := http.Server{
-		Addr: fmt.Sprintf("0.0.0.0:%s", os.Getenv("PORT")),
+		Addr: "0.0.0.0:80",
 		Handler: handlers.CORS(allowedHeaders, allowedOrigins, allowedMethods)(router),
 	}
 
