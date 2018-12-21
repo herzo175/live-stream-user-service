@@ -18,4 +18,8 @@ RUN ls -a /bin/main
 # build minimal image with only binary
 FROM scratch
 COPY --from=build-env /bin/main main
+
+EXPOSE 80
+# TODO: port 443 for https
+
 ENTRYPOINT ["./main"]

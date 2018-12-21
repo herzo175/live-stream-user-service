@@ -5,11 +5,22 @@ steps:
   - name: build
     image: plugins/docker
     settings:
+      repo: jeremyaherzog/live-stream-user-service
       username:
         from_secret: docker_user
       password:
         from_secret: docker_pass
-      repo: jeremyaherzog/live-stream-user-service
       tags:
         - latest
         - ${DRONE_COMMIT_SHA}
+      when:
+        branch: [ master ]
+        event: [ push ]
+  - name: replace-text
+    image: jeremyaherzog/drone-text-replacement
+    settings:
+      filename: deployment.yaml
+      version: ${DRONE_COMMIT_SHA}
+  - name: deploy
+    image: vallard/drone-kube
+    template: deployment.yaml
